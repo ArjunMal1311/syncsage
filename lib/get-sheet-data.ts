@@ -12,11 +12,25 @@ export const getSheetData = async (id: string) => {
         majorDimension: string;
         values: string[][];
     }>(
-      `https://sheets.googleapis.com/v4/spreadsheets/${sheet.sheetId}/values/Sheet1!A1:Z100?key=AIzaSyCaLl4bESrb9BMIQjn8JtA_2hUj0zOv6fA`
+        `https://sheets.googleapis.com/v4/spreadsheets/${sheet.sheetId}/values/Sheet1!A1:Z100?key=AIzaSyCaLl4bESrb9BMIQjn8JtA_2hUj0zOv6fA`
     )
     const sheetData = response.data
 
-    const rows: string[][] = sheetData.values.map(row => 
+    await db.syncEvent.create({
+        data: {
+            userId: sheet.userId,
+            googleSheetId: sheet.id,
+            status: 'completed',
+            syncLogs: {
+                create: {
+                    logMessage: 'Sheet data fetched successfully by Arjun',
+                    logLevel: 'info'
+                }
+            }
+        }
+    })
+
+    const rows: string[][] = sheetData.values.map(row =>
         row.map(cell => cell || '')
     )
 
@@ -26,4 +40,40 @@ export const getSheetData = async (id: string) => {
         rows,
         updatedAt: new Date().toISOString(),
     }
+}
+
+export async function getLogs(sheetId: string) {
+    const logs = await db.syncLog.findMany({
+        where: {
+            syncEvent: {
+                googleSheet: {
+                    sheetId: sheetId
+                }
+            }
+        },
+        orderBy: {
+            createdAt: 'asc'
+        },
+        take: 10,
+        include: {
+            syncEvent: {
+                include: {
+                    user: {
+                        select: {
+                            name: true
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    return logs.map(log => ({
+        id: log.id,
+        userId: log.syncEvent.userId,
+        userName: log.syncEvent.user.name,
+        action: log.logMessage,
+        logLevel: log.logLevel,
+        createdAt: log.createdAt.toISOString()
+    }));
 }

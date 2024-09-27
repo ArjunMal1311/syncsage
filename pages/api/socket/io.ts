@@ -2,7 +2,7 @@ import { NextApiResponseServerIo } from "@/types/types"
 import { Server as NetServer } from "http"
 import { NextApiRequest } from "next"
 import { Server as ServerIO } from "socket.io"
-import { getSheetData } from "@/lib/get-sheet-data"
+import { getLogs, getSheetData } from "@/lib/get-sheet-data"
 
 export const config = {
     api: {
@@ -31,8 +31,9 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIo) => {
                     try {
                         console.log(`Fetching data for sheet: ${sheetId}`);
                         const sheetData = await getSheetData(sheetId);
+                        const logs = await getLogs(sheetId);
                         console.log(`Emitting update for sheet: ${sheetId}`);
-                        io.to(sheetId).emit('sheet_update', sheetData);
+                        io.to(sheetId).emit('sheet_update', { sheetData, logs });
                     } catch (error) {
                         console.error('Error fetching sheet data:', error);
                     }
@@ -40,7 +41,7 @@ const ioHandler = (req: NextApiRequest, res: NextApiResponseServerIo) => {
 
                 await fetchAndEmitData();
 
-                const intervalId = setInterval(fetchAndEmitData, 20000); 
+                const intervalId = setInterval(fetchAndEmitData, 10000); 
 
                 socket.on('unsubscribe_sheet', () => {
                     console.log(`Client unsubscribed from sheet: ${sheetId}`);

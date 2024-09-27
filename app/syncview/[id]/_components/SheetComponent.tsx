@@ -26,14 +26,23 @@ interface SyncViewProps {
     };
 }
 
+interface Log {
+    id: string;
+    logMessage: string;
+    logLevel: string;
+    createdAt: string;
+}
+
 export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
     const [sheet, setSheet] = useState(initialSheet);
     const { socket, isConnected, subscribeToSheet, unsubscribeFromSheet } = useSocket();
     const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+    const [logs, setLogs] = useState<Log[]>([]);
 
-    const handleSheetUpdate = useCallback((updatedSheet: any) => {
-        console.log("Received sheet update:", updatedSheet);
-        setSheet(updatedSheet);
+    const handleSheetUpdate = useCallback((data: { sheetData: any, logs: Log[] }) => {
+        console.log("Received sheet update:", data);
+        setSheet(data.sheetData);
+        setLogs(data.logs);
         setLastUpdateTime(new Date());
         toast.success('Sheet data updated');
     }, []);
@@ -101,6 +110,20 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
             toast.error('Failed to update cell');
         }
     }
+
+    const parseLogMessage = (logMessage: string) => {
+        const parts = logMessage.split('\n');
+        if (parts.length > 1) {
+            return {
+                level: parts[0].replace('[', '').replace(']', '').trim(),
+                message: parts[1].trim()
+            };
+        }
+        return {
+            level: 'INFO',
+            message: logMessage
+        };
+    };
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -180,27 +203,30 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
                             </Table>
                         </CardContent>
                     </Card>
-
-                    {/* Sync Information card */}
+                    {/* Logs card */}
                     <Card className="mb-6">
                         <CardHeader>
-                            <CardTitle>Sync Information</CardTitle>
+                            <CardTitle>Recent Sync Activities</CardTitle>
                         </CardHeader>
                         <CardContent>
-                            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <p className="text-sm font-medium">Last Sync</p>
-                                    <p className="text-2xl font-bold">{lastUpdateTime.toLocaleString()}</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium">Sync Frequency</p>
-                                    <p className="text-2xl font-bold">Every 10 seconds</p>
-                                </div>
-                                <div>
-                                    <p className="text-sm font-medium">Total Records</p>
-                                    <p className="text-2xl font-bold">{sheetData.length}</p>
-                                </div>
-                            </div>
+                            <ScrollArea className="h-[200px]">
+                                {logs.map((log) => {
+                                    const { level, message } = parseLogMessage(log.logMessage);
+                                    return (
+                                        <div key={log.id} className="mb-2 p-2 border-b">
+                                            <p className="text-sm">
+                                                <span className={`font-medium ${level.toLowerCase() === 'error' ? 'text-red-500' : 'text-gray-700'}`}>
+                                                    [{level}]
+                                                </span>
+                                                <span className="ml-2">{message}</span>
+                                                <span className="text-gray-500 ml-2">
+                                                    {new Date(log.createdAt).toLocaleString()}
+                                                </span>
+                                            </p>
+                                        </div>
+                                    );
+                                })}
+                            </ScrollArea>
                         </CardContent>
                     </Card>
                 </div>
