@@ -1,16 +1,17 @@
 "use client"
-import { useState } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Link from 'next/link'
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { AlertCircle, ArrowLeft, CheckCircle, FileSpreadsheet, Pause, Play, RefreshCw, Settings } from "lucide-react"
+import { ArrowLeft, FileSpreadsheet, RefreshCw, Settings } from "lucide-react"
 import { toast, Toaster } from 'sonner'
 import axios from 'axios'
 import { Input } from "@/components/ui/input"
-
+import { useSocket } from "@/providers/socket-provider"
+import { google } from 'googleapis'
 
 interface SyncViewProps {
     sheet: {
@@ -21,44 +22,45 @@ interface SyncViewProps {
         columns: any[];
         createdAt: string;
         updatedAt: string;
-        syncEvents: {
-            id: string;
-            userId: string;
-            googleSheetId: string;
-            status: string;
-            createdAt: string;
-            updatedAt: string;
-            sheetRows: {
-                id: string;
-                syncEventId: string;
-                rowData: any[];
-                rowNumber: number;
-                createdAt: string;
-                updatedAt: string;
-            }[];
-        }[];
+        rows: string[][];
     };
 }
 
-export default function SyncView({ sheet }: SyncViewProps) {
-    const lastSyncEvent = sheet.syncEvents[sheet.syncEvents.length - 1];
-    const [isSyncing, setIsSyncing] = useState(lastSyncEvent?.status === 'SYNCING');
-    const [lastSyncTime, setLastSyncTime] = useState(lastSyncEvent?.createdAt || '');
-    const [editedCell, setEditedCell] = useState<{ row: number, col: number, value: string } | null>(null);
-    const [sheetData, setSheetData] = useState(lastSyncEvent?.sheetRows.map(row => row.rowData) || []);
+export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
+    const [sheet, setSheet] = useState(initialSheet);
+    const { socket, isConnected, subscribeToSheet, unsubscribeFromSheet } = useSocket();
+    const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
+
+    const handleSheetUpdate = useCallback((updatedSheet: any) => {
+        console.log("Received sheet update:", updatedSheet);
+        setSheet(updatedSheet);
+        setLastUpdateTime(new Date());
+        toast.success('Sheet data updated');
+    }, []);
+
+    useEffect(() => {
+        console.log("Socket connection status:", isConnected);
+        if (isConnected) {
+            console.log("Subscribing to sheet:", sheet.id);
+            subscribeToSheet(sheet.id);
+
+            socket.on('sheet_update', handleSheetUpdate);
+
+            return () => {
+                console.log("Unsubscribing from sheet:", sheet.id);
+                unsubscribeFromSheet();
+                socket.off('sheet_update', handleSheetUpdate);
+            };
+        }
+    }, [isConnected, sheet.id, subscribeToSheet, unsubscribeFromSheet, socket, handleSheetUpdate]);
+
+    const [sheetData, setSheetData] = useState(sheet.rows || []);
+
+    useEffect(() => {
+        setSheetData(sheet.rows || []);
+    }, [sheet]);
 
     const maxColumns = Math.max(...sheetData.map(row => row.length));
-
-    const toggleSync = async () => {
-        try {
-            const response = await axios.post(`/api/sheets/${sheet.id}/sync`, { action: isSyncing ? 'pause' : 'resume' })
-            setIsSyncing(!isSyncing)
-            toast(isSyncing ? 'Sync paused' : 'Sync resumed', { icon: isSyncing ? '⏸️' : '▶️' })
-        } catch (error) {
-            console.error('Failed to toggle sync:', error)
-            toast.error('Failed to toggle sync')
-        }
-    }
 
     const handleCellEdit = (rowIndex: number, colIndex: number, value: string) => {
         const newSheetData = [...sheetData];
@@ -72,11 +74,21 @@ export default function SyncView({ sheet }: SyncViewProps) {
         const range = `Sheet1!${column}${row}`;
 
         try {
-            const response = await axios.post(
-                `https://sheets.googleapis.com/v4/spreadsheets/${sheet.sheetId}/values/${range}?valueInputOption=RAW`
-            );
+            const response = await fetch('/api/updateSheet', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    sheetId: sheet.sheetId,
+                    range: range,
+                    value: value
+                }),
+            });
 
-            if (response.status === 200) {
+            const result = await response.json();
+
+            if (result.success) {
                 toast.success('Cell updated successfully');
                 const newSheetData = [...sheetData];
                 newSheetData[rowIndex][colIndex] = value;
@@ -89,8 +101,6 @@ export default function SyncView({ sheet }: SyncViewProps) {
             toast.error('Failed to update cell');
         }
     }
-
-    console.log(sheet)
 
     return (
         <div className="flex h-screen bg-gray-100">
@@ -118,17 +128,15 @@ export default function SyncView({ sheet }: SyncViewProps) {
                     <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
                         <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate">Sync View: {sheet.name}</h2>
                         <div className="flex items-center space-x-4">
-                            <Badge variant={isSyncing ? "default" : "secondary"} className="text-sm py-1">
-                                {isSyncing ? (
-                                    <><RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Syncing</>
-                                ) : (
-                                    <><Pause className="mr-1 h-3 w-3" /> Paused</>
-                                )}
-                            </Badge>
-                            <Button onClick={toggleSync}>
-                                {isSyncing ? <Pause className="mr-2 h-4 w-4" /> : <Play className="mr-2 h-4 w-4" />}
-                                {isSyncing ? 'Pause Sync' : 'Resume Sync'}
-                            </Button>
+                            {isConnected ? (
+                                <Badge variant="default" className="text-sm py-1">
+                                    <RefreshCw className="mr-1 h-3 w-3 animate-spin" /> Syncing
+                                </Badge>
+                            ) : (
+                                <Badge variant="secondary" className="text-sm py-1">
+                                    Offline
+                                </Badge>
+                            )}
                             <Button variant="outline">
                                 <Settings className="mr-2 h-4 w-4" />
                                 Sync Settings
@@ -155,7 +163,7 @@ export default function SyncView({ sheet }: SyncViewProps) {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {sheetData.map((row, rowIndex) => (
+                                    {sheetData.map((row : any, rowIndex : any) => (
                                         <TableRow key={rowIndex}>
                                             {Array.from({ length: maxColumns }).map((_, cellIndex) => (
                                                 <TableCell key={cellIndex}>
@@ -182,51 +190,17 @@ export default function SyncView({ sheet }: SyncViewProps) {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                     <p className="text-sm font-medium">Last Sync</p>
-                                    <p className="text-2xl font-bold">{new Date(lastSyncTime).toLocaleString()}</p>
+                                    <p className="text-2xl font-bold">{lastUpdateTime.toLocaleString()}</p>
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium">Sync Frequency</p>
-                                    <p className="text-2xl font-bold">Every 15 minutes</p>
+                                    <p className="text-2xl font-bold">Every 10 seconds</p>
                                 </div>
                                 <div>
                                     <p className="text-sm font-medium">Total Records</p>
-                                    <p className="text-2xl font-bold">{lastSyncEvent?.sheetRows.length || 0}</p>
+                                    <p className="text-2xl font-bold">{sheetData.length}</p>
                                 </div>
                             </div>
-                        </CardContent>
-                    </Card>
-
-                    {/* Sync Logs card */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle>Sync Logs</CardTitle>
-                            <CardDescription>Recent synchronization events</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <ScrollArea className="h-[300px]">
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Timestamp</TableHead>
-                                            <TableHead>Event</TableHead>
-                                            <TableHead>Status</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {sheet.syncEvents.map((event) => (
-                                            <TableRow key={event.id}>
-                                                <TableCell>{new Date(event.createdAt).toLocaleString()}</TableCell>
-                                                <TableCell>Sync Event</TableCell>
-                                                <TableCell>
-                                                    {event.status === 'completed' && <CheckCircle className="h-5 w-5 text-green-500" />}
-                                                    {event.status === 'error' && <AlertCircle className="h-5 w-5 text-red-500" />}
-                                                    {event.status === 'SYNCING' && <RefreshCw className="h-5 w-5 text-blue-500" />}
-                                                </TableCell>
-                                            </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
-                            </ScrollArea>
                         </CardContent>
                     </Card>
                 </div>

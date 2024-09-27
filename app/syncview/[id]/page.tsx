@@ -1,26 +1,15 @@
-import { db } from '@/lib/db'
 import React from 'react'
 import SyncView from './_components/SheetComponent'
-import { notFound } from 'next/navigation'
 import { getSheetData } from '@/lib/get-sheet-data'
 
 const Page = async ({ params }: { params: { id: string } }) => {
-
+    try {
         const sheet = await getSheetData(params.id)
-
-        const lastSyncEvent = sheet.syncEvents[0]
-        const isSyncing = lastSyncEvent?.status === 'SYNCING'
-        const lastSyncTime = lastSyncEvent?.createdAt.toISOString() || ''
 
         const formattedSheet = {
             ...sheet,
             createdAt: sheet.createdAt.toISOString(),
-            updatedAt: sheet.updatedAt.toISOString(),
-            syncEvents: sheet.syncEvents.map(event => ({
-                ...event,
-                createdAt: event.createdAt.toISOString(),
-                updatedAt: event.updatedAt.toISOString(),
-            })),
+            updatedAt: sheet.updatedAt.toString(),
         }
 
         return (
@@ -28,7 +17,10 @@ const Page = async ({ params }: { params: { id: string } }) => {
                 sheet={formattedSheet as any}
             />
         )
-    
+    } catch (error) {
+        console.error("Error fetching sheet data:", error);
+        return <div>Error loading sheet data. Please try again later.</div>
+    }
 }
 
 export default Page

@@ -1,18 +1,12 @@
 import { db } from "./db"
 import axios from 'axios'
 
-interface GoogleSheetCell {
-  formattedValue?: string;
-}
-
-interface GoogleSheetRow {
-  values: GoogleSheetCell[];
-}
-
 export const getSheetData = async (id: string) => {
+    console.log(`Fetching data for sheet ID: ${id}`);
     const sheet = await db.googleSheet.findUnique({ where: { id } })
     if (!sheet) throw new Error("Sheet not found")
 
+    console.log(`Fetching Google Sheets data for sheet ID: ${sheet.sheetId}`);
     const response = await axios.get<{
         range: string;
         majorDimension: string;
@@ -26,31 +20,10 @@ export const getSheetData = async (id: string) => {
         row.map(cell => cell || '')
     )
 
-    const updatedSheet = await db.googleSheet.update({
-        where: { id },
-        data: {
-            updatedAt: new Date(),
-            syncEvents: {
-                create: {
-                    status: 'completed',
-                    userId: sheet.userId,
-                    sheetRows: {
-                        create: rows.map((row, index) => ({
-                            rowNumber: index,
-                            rowData: row,
-                        })),
-                    },
-                },
-            },
-        },
-        include: { 
-            syncEvents: { 
-                include: { 
-                    sheetRows: true 
-                } 
-            } 
-        },
-    })
-
-    return updatedSheet
+    console.log(`Returning data for sheet ID: ${id}`);
+    return {
+        ...sheet,
+        rows,
+        updatedAt: new Date().toISOString(),
+    }
 }
