@@ -5,13 +5,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { ArrowLeft, FileSpreadsheet, RefreshCw, Settings } from "lucide-react"
 import { toast, Toaster } from 'sonner'
-import axios from 'axios'
 import { Input } from "@/components/ui/input"
 import { useSocket } from "@/providers/socket-provider"
-import { google } from 'googleapis'
 
 interface SyncViewProps {
     sheet: {
@@ -38,6 +35,7 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
     const { socket, isConnected, subscribeToSheet, unsubscribeFromSheet } = useSocket();
     const [lastUpdateTime, setLastUpdateTime] = useState(new Date());
     const [logs, setLogs] = useState<Log[]>([]);
+    const [activeUsers, setActiveUsers] = useState(0);
 
     const handleSheetUpdate = useCallback((data: { sheetData: any, logs: Log[] }) => {
         console.log("Received sheet update:", data);
@@ -48,17 +46,22 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
     }, []);
 
     useEffect(() => {
-        console.log("Socket connection status:", isConnected);
-        if (isConnected) {
+        console.log("Connection status changed. Connected:", isConnected);
+        if (isConnected && socket) {
             console.log("Subscribing to sheet:", sheet.id);
             subscribeToSheet(sheet.id);
 
             socket.on('sheet_update', handleSheetUpdate);
+            socket.on('active_users', (count: number) => {
+                console.log("Received active users update:", count);
+                setActiveUsers(count);
+            });
 
             return () => {
                 console.log("Unsubscribing from sheet:", sheet.id);
                 unsubscribeFromSheet();
                 socket.off('sheet_update', handleSheetUpdate);
+                socket.off('active_users');
             };
         }
     }, [isConnected, sheet.id, subscribeToSheet, unsubscribeFromSheet, socket, handleSheetUpdate]);
@@ -127,7 +130,6 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
 
     return (
         <div className="flex h-screen bg-gray-100">
-            {/* Sidebar */}
             <aside className="w-64 bg-white shadow-md">
                 <div className="p-4">
                     <h1 className="text-2xl font-bold flex items-center">
@@ -143,10 +145,8 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
                 </nav>
             </aside>
 
-            {/* Main Content */}
             <main className="flex-1 overflow-y-auto">
                 <Toaster />
-                {/* Header */}
                 <header className="bg-white shadow-sm">
                     <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8 flex justify-between items-center">
                         <h2 className="text-2xl font-bold leading-7 text-gray-900 sm:truncate">Sync View: {sheet.name}</h2>
@@ -160,6 +160,9 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
                                     Offline
                                 </Badge>
                             )}
+                            <Badge variant="outline" className="text-sm py-1">
+                                Users: {activeUsers}
+                            </Badge>
                             <Button variant="outline">
                                 <Settings className="mr-2 h-4 w-4" />
                                 Sync Settings
@@ -168,9 +171,7 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
                     </div>
                 </header>
 
-                {/* Content */}
                 <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
-                    {/* Google Sheet Data */}
                     <Card className="mb-6">
                         <CardHeader>
                             <CardTitle>Google Sheet Data</CardTitle>
@@ -203,30 +204,33 @@ export default function SyncView({ sheet: initialSheet }: SyncViewProps) {
                             </Table>
                         </CardContent>
                     </Card>
-                    {/* Logs card */}
-                    <Card className="mb-6">
+
+                    <Card>
                         <CardHeader>
-                            <CardTitle>Recent Sync Activities</CardTitle>
+                            <CardTitle>Activity Logs</CardTitle>
+                            <CardDescription>Recent actions and events</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <ScrollArea className="h-[200px]">
-                                {logs.map((log) => {
-                                    const { level, message } = parseLogMessage(log.logMessage);
-                                    return (
-                                        <div key={log.id} className="mb-2 p-2 border-b">
-                                            <p className="text-sm">
-                                                <span className={`font-medium ${level.toLowerCase() === 'error' ? 'text-red-500' : 'text-gray-700'}`}>
-                                                    [{level}]
-                                                </span>
-                                                <span className="ml-2">{message}</span>
-                                                <span className="text-gray-500 ml-2">
-                                                    {new Date(log.createdAt).toLocaleString()}
-                                                </span>
-                                            </p>
-                                        </div>
-                                    );
-                                })}
-                            </ScrollArea>
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Level</TableHead>
+                                        <TableHead>Timestamp</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {logs.map((log) => (
+                                        <TableRow key={log.id}>
+                                            <TableCell>
+                                                <Badge variant={log.logLevel === 'info' ? 'secondary' : 'destructive'}>
+                                                    {log.logLevel}
+                                                </Badge>
+                                            </TableCell>
+                                            <TableCell>{new Date(log.createdAt).toLocaleString()}</TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
                         </CardContent>
                     </Card>
                 </div>

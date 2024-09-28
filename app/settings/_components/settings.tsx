@@ -59,19 +59,16 @@ export default function UserSettings({ user }: UserSettingsProps) {
 
   const handleProfileSubmit = (e : any) => {
     e.preventDefault()
-    // Handle profile update logic here
     console.log('Profile updated:', profileForm)
   }
 
   const handlePasswordSubmit = (e : any) => {
     e.preventDefault()
-    // Handle password change logic here
     console.log('Password changed:', passwordForm)
   }
 
   return (
     <div className="flex h-screen bg-gray-100">
-      {/* Sidebar */}
       <aside className="w-64 bg-white shadow-md">
         <div className="p-4">
           <h1 className="text-2xl font-bold flex items-center">
@@ -91,7 +88,6 @@ export default function UserSettings({ user }: UserSettingsProps) {
         </nav>
       </aside>
 
-      {/* Main Content */}
       <main className="flex-1 overflow-y-auto">
         <h1 className="text-3xl font-bold px-4 py-4 mb-6 pl-8 bg-white w-full">User Settings</h1>
         <div className="container mx-auto py-10">

@@ -6,7 +6,6 @@ export const getSheetData = async (id: string) => {
     const sheet = await db.googleSheet.findUnique({ where: { id } })
     if (!sheet) throw new Error("Sheet not found")
 
-    console.log(`Fetching Google Sheets data for sheet ID: ${sheet.sheetId}`);
     const response = await axios.get<{
         range: string;
         majorDimension: string;
@@ -34,7 +33,6 @@ export const getSheetData = async (id: string) => {
         row.map(cell => cell || '')
     )
 
-    console.log(`Returning data for sheet ID: ${id}`);
     return {
         ...sheet,
         rows,
@@ -46,9 +44,7 @@ export async function getLogs(sheetId: string) {
     const logs = await db.syncLog.findMany({
         where: {
             syncEvent: {
-                googleSheet: {
-                    sheetId: sheetId
-                }
+                googleSheetId: sheetId
             }
         },
         orderBy: {

@@ -24,7 +24,6 @@ export default function RegisterPage() {
       if (response.status === 200) {
         router.push('/login?registered=true')
       } else {
-        // Handle unexpected status
         console.error('Registration failed:', response.data)
       }
     } catch (error) {
@@ -38,7 +37,6 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex flex-col bg-gray-100">
-      {/* Header */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto py-4 px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between">
@@ -55,7 +53,6 @@ export default function RegisterPage() {
         </div>
       </header>
 
-      {/* Registration Form */}
       <div className="flex-grow flex items-center justify-center">
         <Card className="w-full max-w-md">
           <CardHeader>
